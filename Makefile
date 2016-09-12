@@ -7,7 +7,7 @@ OBJECTS=common.o
 USB_REPLAY_OBJECTS=y.tab.o lex.yy.o
 PROGS=usb_capture usb_detach usb_replay usb_reset
 CFLAGS = `pkg-config --cflags libusb-1.0` -g -O0 -DLINUX
-LIBS = `pkg-config --libs libusb-1.0` -lpcap -ll -ly
+LIBS = `pkg-config --libs libusb-1.0` -lpcap -ll
 
 all: $(OBJECTS) $(PROGS)
 
