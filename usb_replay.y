@@ -53,10 +53,15 @@ packet: packet_body { yylval->timing = 0; }
 %%
 
 void yyerror(char *s) {
-    fprintf(stderr, "%s\n", s);
+    printf("\n");
+    fprintf(stderr, "%s%s%c%s\n", s, yychar ? " (near '" : "",
+                                     yychar ? yychar : '\n',
+                                     yychar ? "')\n" : "");
 }
 
 int main(int argc, char **argv) {
+    int ret;
+
     /* Parsing args */
     if(argc != 3) {
         print_help_and_exit(argv);
@@ -77,11 +82,12 @@ int main(int argc, char **argv) {
 
     printf("Sending traffic... ");
     fflush(stdout);
-    yyparse();
-    printf("\n");
+    ret = yyparse();
+    if (ret == 0)
+        printf("\n");
 
     /* Dismiss */
     free(yylval);
     fclose(stdin);
-    return 0;
+    return ret;
 }

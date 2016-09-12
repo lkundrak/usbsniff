@@ -15,8 +15,6 @@ ISOC                   return ISOC;
 IN                     return IN;
 OUT                    return OUT;
 [0-9a-f]+              return HEX;
-
-[-+\n_()#:]            { return *yytext; }
 [ \t]                  ; /* skip whitespace */
-
+.                      { return *yytext; }
 %%
