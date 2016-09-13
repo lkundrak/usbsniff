@@ -15,6 +15,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <pcap.h>
 #include <pcap/usb.h>
 #include <libusb.h>
@@ -25,8 +26,11 @@
 #define MAX_PACKET_SIZE 4096
 #define OUT(...) do { printf(__VA_ARGS__); if(out) { fprintf(out, __VA_ARGS__); } } while(0);
 
+#define NO_OPTIONS  '\x00'
+#define CAPTURE_ALL '\xff'
+
 void print_help_and_exit(char **argv) {
-	fprintf(stderr, "Usage: %s <vid>:<pid> [<filename>]\n", argv[0]);
+	fprintf(stderr, "Usage: %s [--all] <vid>:<pid> [<filename>]\n", argv[0]);
 	exit(-1);
 }
 
@@ -59,7 +63,7 @@ unsigned char bus_number, device_number;
 char errbuf[PCAP_ERRBUF_SIZE];
 FILE *out;
 
-void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
+void process_packet(u_char *options, const struct pcap_pkthdr *header, const u_char *packet) {
 	#ifdef LINUX
 	pcap_usb_header *usb_header = (pcap_usb_header *) packet;
 	if(usb_header->device_address != device_number)
@@ -67,22 +71,25 @@ void process_packet(u_char *args, const struct pcap_pkthdr *header, const u_char
 	// TODO: have a hash table here?
 	static int last_urb_id = 0; // Used for mapping request with it's response 
 	unsigned int last_request_type;
-	if(usb_header->setup.bmRequestType == 128 && usb_header->setup.bRequest == 0x06) {
-		// This one seems being requested each time
-		// when we start a data capture.
-		// I don't think that we are insterested in it's contents,
-		// so just display a message.
-		printf("# GET DESCRIPTOR Request DEVICE\n");
-		// Mark as awaiting response
-		last_urb_id = usb_header->id;
-		last_request_type = usb_header->setup.bmRequestType;
-		return;
-	}
-	if(last_urb_id && last_request_type == 128) {
-		// We do not need it's response as well
-		printf("# GET DESCRIPTOR Response DEVICE\n");
-		last_urb_id = last_request_type = 0;
-		return;
+
+	if (!(*options & CAPTURE_ALL)) {
+		if(usb_header->setup.bmRequestType == 128 && usb_header->setup.bRequest == 0x06) {
+			// This one seems being requested each time
+			// when we start a data capture.
+			// I don't think that we are insterested in it's contents,
+			// so just display a message.
+			printf("# GET DESCRIPTOR Request DEVICE\n");
+			// Mark as awaiting response
+			last_urb_id = usb_header->id;
+			last_request_type = usb_header->setup.bmRequestType;
+			return;
+		}
+		if(last_urb_id && last_request_type == 128) {
+			// We do not need it's response as well
+			printf("# GET DESCRIPTOR Response DEVICE\n");
+			last_urb_id = last_request_type = 0;
+			return;
+		}
 	}
 
 	// Transfer type
@@ -159,17 +166,25 @@ void pcap_list_devices() {
 
 int main(int argc, char *argv[])
 {
+	int arg = 1;
+
 	// Parsing args
-	if(argc < 2 || argc > 3)
+	if(argc < 2 || argc > 4)
 		print_help_and_exit(argv);
+
 	int result, vid, pid;
-	result = sscanf(argv[1], "%x:%x", &vid, &pid);
+	u_char options = NO_OPTIONS;
+	if (strcmp(argv[arg], "--all") == 0) {
+		options |= CAPTURE_ALL;
+		arg++;
+	}
+	result = sscanf(argv[arg++], "%x:%x", &vid, &pid);
 	if(!result)
 		print_help_and_exit(argv);
 	out = NULL;
-	if(argc > 2) {
+	if(argc > arg) {
 		// Opening log file
-		out = fopen ( argv[2], "w" );
+		out = fopen ( argv[arg++], "w" );
 		if(!out) {
 			perror("Couldn't open log");
 			exit(-1);
@@ -206,7 +221,7 @@ int main(int argc, char *argv[])
 		#endif
 		return(2);
 	}
-	pcap_loop(handle, -1, process_packet, NULL);
+	pcap_loop(handle, -1, process_packet, &options);
 	printf("exit\n");
 	pcap_close(handle);
 	if(out)
